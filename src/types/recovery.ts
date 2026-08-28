@@ -1,4 +1,9 @@
-export type LeakType = 'payment_degradation' | 'b2b_receivables' | 'checkout_abandonment';
+export type LeakType = 
+  | 'payment_failure' 
+  | 'checkout_abandonment' 
+  | 'failed_subscription' 
+  | 'overdue_invoice' 
+  | 'mandate_failure';
 
 export type Stage = 'detect' | 'diagnose' | 'decide' | 'act' | 'measure';
 
@@ -12,6 +17,17 @@ export type TerminalState =
   | 'escalated_to_human' 
   | 'blocked_by_guardrail';
 
+export type RiskLevel = 'HIGH' | 'MEDIUM' | 'LOW';
+
+export type ActionType = 
+  | 'payment_retry' 
+  | 'email_reminder' 
+  | 'whatsapp_reminder' 
+  | 'checkout_recovery' 
+  | 'subscription_recovery' 
+  | 'invoice_followup' 
+  | 'human_escalation';
+
 export interface RevenueEvent {
   id: string;
   type: LeakType;
@@ -20,20 +36,24 @@ export interface RevenueEvent {
   customer_email: string;
   customer_phone: string;
   customer_tier: 'enterprise' | 'growth' | 'smb' | 'b2c';
-  amount: number;
-  currency: string;
+  amount: number; // In INR (₹)
+  currency: string; // 'INR' or '₹'
   timestamp: string;
   raw_payload: Record<string, any>;
   
   // Pipeline metrics & state
-  recoverability_score: number; // 0 - 100%
-  expected_recoverable_value: number; // amount * (score / 100)
+  risk_level: RiskLevel;
+  recovery_probability: number; // 0 - 100%
+  expected_recoverable_value: number; // amount * (probability / 100)
   status: TerminalState;
   current_stage: Stage;
   outreach_count: number;
   last_outreach_at?: string;
   do_not_contact: boolean;
   quiet_hours_active: boolean;
+  stopped_reason?: string;
+  next_action: string;
+  escalation_status: 'normal' | 'escalated' | 'stopped';
   
   // Stages results
   diagnosis?: DiagnosisResult;
@@ -50,17 +70,9 @@ export interface DiagnosisResult {
   invoice_age_days?: number;
   signal_sources: string[];
   llm_reasoning_summary: string;
+  why_this_action: string;
   recommended_action_class: string;
 }
-
-export type ActionType = 
-  | 'smart_retry' 
-  | 'payment_link' 
-  | 'email_nudge' 
-  | 'sms_nudge' 
-  | 'hinglish_voice' 
-  | 'ar_human_task' 
-  | 'discount_nudge';
 
 export interface PolicyDecision {
   policy_id: string;
@@ -68,12 +80,14 @@ export interface PolicyDecision {
   chosen_action_type: ActionType;
   proposed_incentive_percent?: number;
   draft_message: string;
-  hinglish_voice_script?: string;
+  whatsapp_script?: string;
+  why_this_action: string;
+  confidence: number;
   llm_rationale: string;
 }
 
 export interface ActionExecution {
-  connector: string;
+  connector: string; // Clearly labeled with [Simulation / Demo Mode]
   executed_at: string;
   status: 'success' | 'scheduled' | 'escalated' | 'failed';
   payload_delivered: Record<string, any>;
@@ -81,6 +95,7 @@ export interface ActionExecution {
   payment_update_url?: string;
   ar_task_id?: string;
   promise_to_pay_date?: string;
+  simulation_label: string;
 }
 
 export interface StoppingRuleCheck {
@@ -99,6 +114,7 @@ export interface AuditLogEntry {
   actor: 'DETECTOR' | 'DIAGNOSER' | 'POLICY_ENGINE' | 'STOPPING_ENGINE' | 'ACTUATOR' | 'HUMAN_OPERATOR';
   action_taken: string;
   description: string;
+  amount?: number;
   metadata?: Record<string, any>;
 }
 
@@ -107,12 +123,12 @@ export interface BatchSummary {
   total_value_at_risk: number;
   total_recovered_value: number;
   overall_recovery_rate: number; // %
+  active_recoveries_count: number;
   escalated_count: number;
   blocked_guardrails_count: number;
+  recovered_count: number;
+  pending_count: number;
+  stopped_count: number;
   avg_time_to_recovery_hours: number;
-  leak_breakdown: {
-    payment_degradation: { total: number; recovered: number; count: number };
-    b2b_receivables: { total: number; recovered: number; count: number };
-    checkout_abandonment: { total: number; recovered: number; count: number };
-  };
+  leak_breakdown: Record<LeakType, { total: number; recovered: number; count: number }>;
 }

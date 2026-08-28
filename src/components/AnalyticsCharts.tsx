@@ -11,198 +11,181 @@ import {
   PieChart, 
   Pie, 
   Cell, 
+  LineChart, 
+  Line, 
   Legend 
 } from 'recharts';
-import { TrendingUp, PieChart as PieIcon, BarChart2, DollarSign } from 'lucide-react';
+import { BarChart3, PieChart as PieIcon, TrendingUp, DollarSign } from 'lucide-react';
 
 interface AnalyticsChartsProps {
   summary: BatchSummary;
 }
 
 export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ summary }) => {
-  
-  // Data 1: Recovery by Leak Type
-  const leakData = [
-    {
-      name: 'Payment Degradation',
-      AtRisk: summary.leak_breakdown.payment_degradation.total,
-      Recovered: summary.leak_breakdown.payment_degradation.recovered,
-      Rate: summary.leak_breakdown.payment_degradation.total > 0
-        ? Math.round((summary.leak_breakdown.payment_degradation.recovered / summary.leak_breakdown.payment_degradation.total) * 100)
-        : 0
-    },
-    {
-      name: 'B2B Receivables',
-      AtRisk: summary.leak_breakdown.b2b_receivables.total,
-      Recovered: summary.leak_breakdown.b2b_receivables.recovered,
-      Rate: summary.leak_breakdown.b2b_receivables.total > 0
-        ? Math.round((summary.leak_breakdown.b2b_receivables.recovered / summary.leak_breakdown.b2b_receivables.total) * 100)
-        : 0
-    },
-    {
-      name: 'Checkout Abandonment',
-      AtRisk: summary.leak_breakdown.checkout_abandonment.total,
-      Recovered: summary.leak_breakdown.checkout_abandonment.recovered,
-      Rate: summary.leak_breakdown.checkout_abandonment.total > 0
-        ? Math.round((summary.leak_breakdown.checkout_abandonment.recovered / summary.leak_breakdown.checkout_abandonment.total) * 100)
-        : 0
-    }
+  const formatRupeeLakhs = (val: number) => `₹${(val / 100000).toFixed(1)}L`;
+
+  // 1. Scenario Leak Breakdown Data
+  const scenarioData = Object.entries(summary.leak_breakdown).map(([key, val]) => ({
+    name: key.replace('_', ' ').toUpperCase(),
+    total: Math.round(val.total),
+    recovered: Math.round(val.recovered),
+    rate: val.total > 0 ? ((val.recovered / val.total) * 100).toFixed(1) : 0
+  }));
+
+  // 2. Recovery Rate by Intervention Data
+  const interventionData = [
+    { name: 'Payment Retry', rate: 88, recovered: 195000 },
+    { name: 'WhatsApp Reminder', rate: 84, recovered: 140000 },
+    { name: 'Email Reminder', rate: 76, recovered: 95000 },
+    { name: 'Checkout Recovery', rate: 72, recovered: 60000 },
+    { name: 'Subscription Recovery', rate: 82, recovered: 50000 }
   ];
 
-  // Data 2: Root Cause Distribution
-  const causeData = [
-    { name: 'Expired Credit Card', value: 38, color: '#3B82F6' },
-    { name: 'Transient Payday Deficit', value: 25, color: '#6366F1' },
-    { name: 'Aged Invoice Cash-Flow', value: 18, color: '#8B5CF6' },
-    { name: 'PO Line Item Dispute', value: 10, color: '#F59E0B' },
-    { name: 'Shipping Cost Hesitation', value: 9, color: '#10B981' }
+  // 3. Status Breakdown
+  const statusPieData = [
+    { name: 'Recovered', value: summary.recovered_count, color: '#10B981' },
+    { name: 'Active / Pending', value: summary.active_recoveries_count + summary.pending_count, color: '#3B82F6' },
+    { name: 'Escalated', value: summary.escalated_count, color: '#F59E0B' },
+    { name: 'Guardrail Stopped', value: summary.blocked_guardrails_count, color: '#EF4444' }
   ];
 
-  // Data 3: Time to Recovery
-  const timeData = [
-    { range: '< 6 Hours', count: 42 },
-    { range: '6 - 24 Hours', count: 85 },
-    { range: '24 - 48 Hours', count: 34 },
-    { range: '48+ Hours', count: 16 }
-  ];
-
-  // Data 4: Cost vs Revenue Saved ROI
-  const roiData = [
-    { category: 'Recovered Revenue Saved', value: summary.total_recovered_value, color: '#10B981' },
-    { category: 'Agent Intervention Cost (Discounts/SMS)', value: Math.round(summary.total_recovered_value * 0.022), color: '#EF4444' }
+  // 4. Recovery Trend over 7 days
+  const trendData = [
+    { day: 'Mon', atRisk: 120000, recovered: 78000 },
+    { day: 'Tue', atRisk: 140000, recovered: 92000 },
+    { day: 'Wed', atRisk: 160000, recovered: 105000 },
+    { day: 'Thu', atRisk: 130000, recovered: 89000 },
+    { day: 'Fri', atRisk: 170000, recovered: 112000 },
+    { day: 'Sat', atRisk: 100000, recovered: 64000 },
+    { day: 'Sun', atRisk: summary.total_value_at_risk, recovered: summary.total_recovered_value }
   ];
 
   return (
     <div className="space-y-6">
       
+      {/* Top 2 Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
-        {/* Chart 1: Revenue at Risk vs Recovered */}
-        <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-4">
+        {/* Chart 1: Revenue at Risk vs Recovered by Scenario */}
+        <div className="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <TrendingUp className="w-4 h-4 text-blue-400" />
-              Revenue at Risk vs Recovered by Leak Type ($)
+              <BarChart3 className="w-4 h-4 text-blue-400" />
+              Revenue at Risk vs Recovered by Problem Type
             </h3>
-            <span className="text-xs text-slate-400">Total Batch Comparison</span>
+            <span className="text-xs text-slate-400 font-mono">Rupees (₹)</span>
           </div>
 
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={leakData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" />
-                <XAxis dataKey="name" stroke="#94A3B8" fontSize={11} />
-                <YAxis stroke="#94A3B8" fontSize={11} tickFormatter={(val) => `$${val / 1000}k`} />
+              <BarChart data={scenarioData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
+                <XAxis dataKey="name" stroke="#64748B" fontSize={10} tickLine={false} />
+                <YAxis stroke="#64748B" fontSize={10} tickFormatter={(val) => `₹${val / 1000}k`} />
                 <Tooltip 
-                  contentStyle={{ backgroundColor: '#0B111E', borderColor: '#1F2937', color: '#F8FAFC', borderRadius: '12px', fontSize: '12px' }}
-                  formatter={(val: any) => [`$${Number(val).toLocaleString()}`, '']}
+                  contentStyle={{ backgroundColor: '#0F172A', borderColor: '#334155', borderRadius: '12px', fontSize: '12px' }}
+                  formatter={(val: any) => [`₹${Number(val).toLocaleString('en-IN')}`, '']}
                 />
-                <Bar dataKey="AtRisk" name="Revenue at Risk" fill="#3B82F6" opacity={0.5} radius={[6, 6, 0, 0]} />
-                <Bar dataKey="Recovered" name="Recovered Revenue" fill="#10B981" radius={[6, 6, 0, 0]} />
+                <Legend wrapperStyle={{ fontSize: '11px' }} />
+                <Bar dataKey="total" name="At Risk (₹)" fill="#3B82F6" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="recovered" name="Recovered (₹)" fill="#10B981" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        {/* Chart 2: Cause Distribution Pie */}
-        <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-4">
+        {/* Chart 2: Recovery Rate by Intervention */}
+        <div className="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <PieIcon className="w-4 h-4 text-purple-400" />
-              Root Cause Breakdown Across Events
+              <TrendingUp className="w-4 h-4 text-emerald-400" />
+              Recovery Success Rate by Intervention (%)
             </h3>
-            <span className="text-xs text-slate-400">Diagnostic Classifier</span>
-          </div>
-
-          <div className="h-64 w-full flex items-center justify-center">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={causeData}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={55}
-                  outerRadius={85}
-                  paddingAngle={4}
-                  dataKey="value"
-                >
-                  {causeData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#0B111E', borderColor: '#1F2937', color: '#F8FAFC', borderRadius: '12px', fontSize: '12px' }}
-                  formatter={(val: any) => [`${val}% of cases`, '']}
-                />
-                <Legend 
-                  verticalAlign="bottom" 
-                  height={36} 
-                  wrapperStyle={{ fontSize: '11px', color: '#94A3B8' }}
-                />
-              </PieChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Chart 3: Time to Recovery Distribution */}
-        <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <BarChart2 className="w-4 h-4 text-emerald-400" />
-              Time-to-Recovery Velocity Distribution
-            </h3>
-            <span className="text-xs text-slate-400">Hours to Resolution</span>
+            <span className="text-xs text-slate-400 font-mono">Percentage</span>
           </div>
 
           <div className="h-64 w-full">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={timeData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" />
-                <XAxis dataKey="range" stroke="#94A3B8" fontSize={11} />
-                <YAxis stroke="#94A3B8" fontSize={11} />
+              <BarChart data={interventionData} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
+                <XAxis type="number" domain={[0, 100]} stroke="#64748B" fontSize={10} tickFormatter={(v) => `${v}%`} />
+                <YAxis dataKey="name" type="category" stroke="#94A3B8" fontSize={10} width={130} />
                 <Tooltip 
-                  contentStyle={{ backgroundColor: '#0B111E', borderColor: '#1F2937', color: '#F8FAFC', borderRadius: '12px', fontSize: '12px' }}
-                  formatter={(val: any) => [`${val} Cases`, 'Resolved']}
+                  contentStyle={{ backgroundColor: '#0F172A', borderColor: '#334155', borderRadius: '12px', fontSize: '12px' }}
+                  formatter={(val: any) => [`${val}%`, 'Recovery Rate']}
                 />
-                <Bar dataKey="count" fill="#8B5CF6" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* Chart 4: Financial ROI */}
-        <div className="glass-panel p-5 rounded-2xl border border-slate-800 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-white flex items-center gap-2">
-              <DollarSign className="w-4 h-4 text-emerald-400" />
-              Recovery ROI (Revenue Saved vs Intervention Cost)
-            </h3>
-            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-              45x Net ROI
-            </span>
-          </div>
-
-          <div className="h-64 w-full flex items-center justify-center">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={roiData} layout="vertical" margin={{ top: 10, right: 30, left: 40, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1F2937" />
-                <XAxis type="number" stroke="#94A3B8" fontSize={11} tickFormatter={(val) => `$${val}`} />
-                <YAxis type="category" dataKey="category" stroke="#94A3B8" fontSize={11} width={130} />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#0B111E', borderColor: '#1F2937', color: '#F8FAFC', borderRadius: '12px', fontSize: '12px' }}
-                  formatter={(val: any) => [`$${Number(val).toLocaleString()}`, 'Amount']}
-                />
-                <Bar dataKey="value" radius={[0, 6, 6, 0]}>
-                  {roiData.map((entry, index) => (
-                    <Cell key={`cell-roi-${index}`} fill={entry.color} />
-                  ))}
-                </Bar>
+                <Bar dataKey="rate" fill="#06B6D4" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
 
       </div>
+
+      {/* Bottom 2 Charts Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        
+        {/* Chart 3: Case Status Breakdown Pie */}
+        <div className="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <PieIcon className="w-4 h-4 text-purple-400" />
+              Case Distribution (Recovered vs Pending vs Escalated vs Stopped)
+            </h3>
+          </div>
+
+          <div className="h-64 w-full flex items-center justify-center">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={statusPieData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={90}
+                  paddingAngle={5}
+                  dataKey="value"
+                >
+                  {statusPieData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip contentStyle={{ backgroundColor: '#0F172A', borderColor: '#334155', borderRadius: '12px', fontSize: '12px' }} />
+                <Legend wrapperStyle={{ fontSize: '11px' }} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* Chart 4: 7-Day Cumulative Recovery Trend */}
+        <div className="glass-panel p-5 rounded-3xl border border-slate-800 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-white flex items-center gap-2">
+              <TrendingUp className="w-4 h-4 text-cyan-400" />
+              Cumulative Recovery Trend Over Time
+            </h3>
+          </div>
+
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={trendData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
+                <XAxis dataKey="day" stroke="#64748B" fontSize={10} />
+                <YAxis stroke="#64748B" fontSize={10} tickFormatter={(v) => `₹${v / 1000}k`} />
+                <Tooltip 
+                  contentStyle={{ backgroundColor: '#0F172A', borderColor: '#334155', borderRadius: '12px', fontSize: '12px' }}
+                  formatter={(val: any) => [`₹${Number(val).toLocaleString('en-IN')}`, '']}
+                />
+                <Legend wrapperStyle={{ fontSize: '11px' }} />
+                <Line type="monotone" dataKey="atRisk" name="At Risk (₹)" stroke="#6366F1" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="recovered" name="Recovered (₹)" stroke="#10B981" strokeWidth={3} dot={{ r: 4 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+      </div>
+
     </div>
   );
 };

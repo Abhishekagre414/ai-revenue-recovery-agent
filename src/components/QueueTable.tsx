@@ -1,18 +1,18 @@
 import React, { useState } from 'react';
-import { RevenueEvent, LeakType, TerminalState } from '../types/recovery';
+import { RevenueEvent, LeakType, TerminalState, RiskLevel } from '../types/recovery';
 import { 
   CreditCard, 
   FileText, 
   ShoppingCart, 
   Search, 
   ArrowUpDown, 
-  AlertTriangle, 
   CheckCircle, 
   Clock, 
   UserCheck, 
   ShieldAlert, 
   ChevronRight,
-  ExternalLink
+  RefreshCw,
+  HelpCircle
 } from 'lucide-react';
 
 interface QueueTableProps {
@@ -28,6 +28,7 @@ export const QueueTable: React.FC<QueueTableProps> = ({
 }) => {
   const [leakFilter, setLeakFilter] = useState<LeakType | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<TerminalState | 'all'>('all');
+  const [riskFilter, setRiskFilter] = useState<RiskLevel | 'all'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState<'value' | 'amount' | 'score'>('value');
 
@@ -35,6 +36,7 @@ export const QueueTable: React.FC<QueueTableProps> = ({
   const filteredEvents = events.filter(evt => {
     if (leakFilter !== 'all' && evt.type !== leakFilter) return false;
     if (statusFilter !== 'all' && evt.status !== statusFilter) return false;
+    if (riskFilter !== 'all' && evt.risk_level !== riskFilter) return false;
     if (selectedStageFilter !== 'all' && evt.current_stage !== selectedStageFilter) return false;
     if (searchTerm) {
       const term = searchTerm.toLowerCase();
@@ -51,31 +53,47 @@ export const QueueTable: React.FC<QueueTableProps> = ({
   const sortedEvents = [...filteredEvents].sort((a, b) => {
     if (sortBy === 'value') return b.expected_recoverable_value - a.expected_recoverable_value;
     if (sortBy === 'amount') return b.amount - a.amount;
-    if (sortBy === 'score') return b.recoverability_score - a.recoverability_score;
+    if (sortBy === 'score') return b.recovery_probability - a.recovery_probability;
     return 0;
   });
 
+  const formatRupee = (val: number) => `₹${val.toLocaleString('en-IN')}`;
+
   const getLeakBadge = (type: LeakType) => {
     switch (type) {
-      case 'payment_degradation':
+      case 'payment_failure':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20 text-xs font-semibold">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20 text-xs font-semibold">
             <CreditCard className="w-3.5 h-3.5" />
-            Payment Fail
+            Failed Payment
           </span>
         );
-      case 'b2b_receivables':
+      case 'failed_subscription':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/20 text-xs font-semibold">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-xs font-semibold">
+            <RefreshCw className="w-3.5 h-3.5" />
+            Failed Subscription
+          </span>
+        );
+      case 'overdue_invoice':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/20 text-xs font-semibold">
             <FileText className="w-3.5 h-3.5" />
-            B2B Invoice
+            Overdue Invoice
           </span>
         );
       case 'checkout_abandonment':
         return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-semibold">
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-semibold">
             <ShoppingCart className="w-3.5 h-3.5" />
-            Cart Abandon
+            Checkout Abandon
+          </span>
+        );
+      case 'mandate_failure':
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-rose-500/10 text-rose-400 border border-rose-500/20 text-xs font-semibold">
+            <ShieldAlert className="w-3.5 h-3.5" />
+            Mandate Failure
           </span>
         );
     }
@@ -111,12 +129,6 @@ export const QueueTable: React.FC<QueueTableProps> = ({
             GUARDRAIL BLOCKED
           </span>
         );
-      case 'lost':
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-400 border border-slate-700 text-xs font-bold">
-            LOST
-          </span>
-        );
       default:
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-xs font-semibold animate-pulse">
@@ -127,7 +139,7 @@ export const QueueTable: React.FC<QueueTableProps> = ({
   };
 
   return (
-    <div className="glass-panel rounded-2xl border border-slate-800 overflow-hidden">
+    <div className="glass-panel rounded-3xl border border-slate-800 overflow-hidden shadow-2xl">
       
       {/* Table Toolbar */}
       <div className="p-4 border-b border-slate-800/80 bg-slate-900/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -139,24 +151,26 @@ export const QueueTable: React.FC<QueueTableProps> = ({
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search customer, email, invoice ID or payload..."
+            placeholder="Search Customer ID, email, invoice ID..."
             className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500/50"
           />
         </div>
 
-        {/* Filters & Sort */}
+        {/* Filters */}
         <div className="flex flex-wrap items-center gap-2 text-xs">
           
-          {/* Leak Type Filter */}
+          {/* Scenario Filter (Hackathon prompt 5) */}
           <select
             value={leakFilter}
             onChange={(e) => setLeakFilter(e.target.value as any)}
             className="bg-slate-950/80 border border-slate-800 text-slate-300 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-blue-500/50"
           >
-            <option value="all">All Leak Types</option>
-            <option value="payment_degradation">Payment Degradation</option>
-            <option value="b2b_receivables">B2B Receivables</option>
+            <option value="all">All 5 Scenarios</option>
+            <option value="payment_failure">Failed Payment</option>
+            <option value="failed_subscription">Failed Subscription</option>
+            <option value="overdue_invoice">Overdue Invoice</option>
             <option value="checkout_abandonment">Checkout Abandonment</option>
+            <option value="mandate_failure">Mandate Failure</option>
           </select>
 
           {/* Status Filter */}
@@ -173,6 +187,18 @@ export const QueueTable: React.FC<QueueTableProps> = ({
             <option value="blocked_by_guardrail">Guardrail Blocked</option>
           </select>
 
+          {/* Risk Level Filter */}
+          <select
+            value={riskFilter}
+            onChange={(e) => setRiskFilter(e.target.value as any)}
+            className="bg-slate-950/80 border border-slate-800 text-slate-300 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-blue-500/50"
+          >
+            <option value="all">All Risk Levels</option>
+            <option value="HIGH">HIGH Risk</option>
+            <option value="MEDIUM">MEDIUM Risk</option>
+            <option value="LOW">LOW Risk</option>
+          </select>
+
           {/* Sort By */}
           <div className="flex items-center bg-slate-950/80 border border-slate-800 rounded-xl p-1 text-slate-400">
             <ArrowUpDown className="w-3.5 h-3.5 ml-1.5 mr-1" />
@@ -180,13 +206,13 @@ export const QueueTable: React.FC<QueueTableProps> = ({
               onClick={() => setSortBy('value')}
               className={`px-2 py-1 rounded-lg ${sortBy === 'value' ? 'bg-blue-600 text-white font-bold' : 'hover:text-slate-200'}`}
             >
-              Exp. Value ($)
+              Exp. Value (₹)
             </button>
             <button
               onClick={() => setSortBy('amount')}
               className={`px-2 py-1 rounded-lg ${sortBy === 'amount' ? 'bg-blue-600 text-white font-bold' : 'hover:text-slate-200'}`}
             >
-              Amount ($)
+              Amount (₹)
             </button>
             <button
               onClick={() => setSortBy('score')}
@@ -204,14 +230,14 @@ export const QueueTable: React.FC<QueueTableProps> = ({
         <table className="w-full text-left text-xs border-collapse">
           <thead>
             <tr className="border-b border-slate-800/80 bg-slate-950/40 text-slate-400 uppercase font-semibold text-[10px] tracking-wider">
-              <th className="py-3 px-4">Event ID</th>
-              <th className="py-3 px-4">Leak Type</th>
-              <th className="py-3 px-4">Customer</th>
-              <th className="py-3 px-4 text-right">Amount ($)</th>
-              <th className="py-3 px-4 text-right">Recoverability</th>
-              <th className="py-3 px-4 text-right">Prioritized Exp. Value</th>
+              <th className="py-3 px-4">Customer / ID</th>
+              <th className="py-3 px-4">Scenario Type</th>
+              <th className="py-3 px-4">Risk Level</th>
+              <th className="py-3 px-4 text-right">Amount (₹)</th>
+              <th className="py-3 px-4 text-right">Recovery Prob</th>
+              <th className="py-3 px-4 text-right">Exp. Recovered (₹)</th>
               <th className="py-3 px-4">Status</th>
-              <th className="py-3 px-4">Diagnosis / Action</th>
+              <th className="py-3 px-4">Recommended Intervention & Why</th>
               <th className="py-3 px-4 text-center">Inspect</th>
             </tr>
           </thead>
@@ -219,7 +245,7 @@ export const QueueTable: React.FC<QueueTableProps> = ({
             {sortedEvents.length === 0 ? (
               <tr>
                 <td colSpan={9} className="py-8 text-center text-slate-500">
-                  No revenue leak events match your current filter parameters.
+                  No revenue leak cases match your current filter parameters.
                 </td>
               </tr>
             ) : (
@@ -229,41 +255,53 @@ export const QueueTable: React.FC<QueueTableProps> = ({
                   onClick={() => onSelectCase(evt)}
                   className="hover:bg-slate-800/40 transition cursor-pointer group"
                 >
-                  <td className="py-3 px-4 text-slate-300 font-mono font-semibold">
-                    {evt.id}
+                  <td className="py-3 px-4">
+                    <div className="font-bold text-slate-100 font-mono">{evt.id}</div>
+                    <div className="text-[11px] text-slate-300 font-semibold">{evt.customer_name}</div>
+                    <div className="text-[10px] text-slate-400 font-mono">{evt.customer_email}</div>
                   </td>
                   <td className="py-3 px-4">
                     {getLeakBadge(evt.type)}
                   </td>
                   <td className="py-3 px-4">
-                    <div className="font-bold text-slate-100">{evt.customer_name}</div>
-                    <div className="text-[10px] text-slate-400 font-mono">{evt.customer_email}</div>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                      evt.risk_level === 'HIGH'
+                        ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
+                        : evt.risk_level === 'MEDIUM'
+                        ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                        : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                    }`}>
+                      {evt.risk_level} RISK
+                    </span>
                   </td>
-                  <td className="py-3 px-4 text-right font-bold text-slate-200">
-                    ${evt.amount.toLocaleString()}
+                  <td className="py-3 px-4 text-right font-bold text-slate-200 font-mono">
+                    {formatRupee(evt.amount)}
                   </td>
-                  <td className="py-3 px-4 text-right">
-                    <div className="inline-flex items-center gap-1 font-bold">
-                      <span className={evt.recoverability_score > 85 ? 'text-emerald-400' : evt.recoverability_score > 60 ? 'text-amber-400' : 'text-rose-400'}>
-                        {evt.recoverability_score}%
-                      </span>
-                    </div>
+                  <td className="py-3 px-4 text-right font-mono">
+                    <span className={evt.recovery_probability > 85 ? 'text-emerald-400 font-bold' : evt.recovery_probability > 60 ? 'text-amber-400 font-bold' : 'text-rose-400 font-bold'}>
+                      {evt.recovery_probability}%
+                    </span>
                   </td>
-                  <td className="py-3 px-4 text-right font-black text-blue-400 font-mono">
-                    ${evt.expected_recoverable_value.toLocaleString()}
+                  <td className="py-3 px-4 text-right font-black text-emerald-400 font-mono">
+                    {formatRupee(evt.expected_recoverable_value)}
                   </td>
                   <td className="py-3 px-4">
                     {getStatusBadge(evt.status)}
                   </td>
-                  <td className="py-3 px-4 max-w-xs truncate text-slate-300">
-                    {evt.diagnosis ? (
-                      <div>
-                        <div className="font-bold text-slate-200 text-[11px] truncate">
-                          {evt.diagnosis.root_cause}
+                  <td className="py-3 px-4 max-w-xs text-slate-300">
+                    {evt.decision ? (
+                      <div className="space-y-0.5">
+                        <div className="font-bold text-blue-400 text-[11px] capitalize flex items-center gap-1">
+                          {evt.decision.chosen_action_type.replace('_', ' ')}
+                          <span className="text-[9px] text-slate-400 font-mono">({evt.decision.confidence}%)</span>
                         </div>
-                        <div className="text-[10px] text-slate-400 truncate">
-                          {evt.decision?.matched_rule || evt.diagnosis.recommended_action_class}
+                        <div className="text-[10px] text-slate-400 line-clamp-1 italic" title={evt.decision.why_this_action}>
+                          "{evt.decision.why_this_action}"
                         </div>
+                      </div>
+                    ) : evt.diagnosis ? (
+                      <div className="text-[11px] font-semibold text-slate-300">
+                        {evt.diagnosis.root_cause}
                       </div>
                     ) : (
                       <span className="text-slate-500 italic">Pending Diagnostic Agent</span>
@@ -289,7 +327,7 @@ export const QueueTable: React.FC<QueueTableProps> = ({
 
       {sortedEvents.length > 50 && (
         <div className="p-3 text-center text-xs text-slate-500 border-t border-slate-800 bg-slate-950/40">
-          Showing top 50 prioritized cases out of {sortedEvents.length} total events.
+          Showing top 50 cases out of {sortedEvents.length} total events.
         </div>
       )}
     </div>

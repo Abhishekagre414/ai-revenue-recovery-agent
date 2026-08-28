@@ -2,55 +2,65 @@ import { RevenueEvent } from '../types/recovery';
 
 export class DetectionEngine {
   /**
-   * Prioritizes incoming event batch by Expected Recoverable Value ($)
+   * Prioritizes incoming event batch by Expected Recoverable Value (₹)
    */
   public prioritizeQueue(events: RevenueEvent[]): RevenueEvent[] {
     return [...events].sort((a, b) => b.expected_recoverable_value - a.expected_recoverable_value);
   }
 
   /**
-   * Processes event normalization and validates required telemetry fields
+   * Normalizes incoming raw telemetry event into standard RevenueEvent format
    */
   public normalizeEvent(raw: Partial<RevenueEvent>): RevenueEvent {
     const now = new Date().toISOString();
-    const id = raw.id || `EVT-${Math.floor(100000 + Math.random() * 900000)}`;
-    const amount = Number(raw.amount) || 100;
-    const type = raw.type || 'payment_degradation';
+    const id = raw.id || `CUST-${Math.floor(1000 + Math.random() * 9000)}`;
+    const amount = Number(raw.amount) || 15000;
+    const type = raw.type || 'payment_failure';
     
-    // Simple heuristic recoverability scoring based on type & metadata
-    let score = 75;
-    if (type === 'payment_degradation') {
-      if (raw.raw_payload?.decline_code === 'expired_card') score = 92;
-      else if (raw.raw_payload?.decline_code === 'insufficient_funds') score = 80;
-      else if (raw.raw_payload?.decline_code === 'issuer_block') score = 50;
-    } else if (type === 'b2b_receivables') {
-      const age = raw.raw_payload?.days_past_due || 15;
-      score = Math.max(30, 95 - age * 1.2);
-    } else if (type === 'checkout_abandonment') {
-      score = 70;
+    let prob = 80;
+    let riskLevel = raw.risk_level || 'MEDIUM';
+
+    if (type === 'payment_failure') {
+      if (raw.raw_payload?.decline_code === 'expired_card') prob = 92;
+      else if (raw.raw_payload?.decline_code === 'insufficient_funds') prob = 85;
+      else if (raw.raw_payload?.decline_code === 'issuer_do_not_honor') { prob = 50; riskLevel = 'HIGH'; }
+    } else if (type === 'overdue_invoice') {
+      const age = raw.raw_payload?.days_past_due || 20;
+      prob = Math.max(30, 95 - age * 1.2);
+      if (age > 30) riskLevel = 'HIGH';
+    } else if (type === 'mandate_failure') {
+      prob = 70;
+      riskLevel = 'HIGH';
+    } else if (type === 'failed_subscription') {
+      prob = 88;
+    } else {
+      prob = 82;
     }
 
-    const expectedValue = Math.round(amount * (score / 100) * 100) / 100;
+    const expectedValue = Math.round(amount * (prob / 100));
 
     return {
       id,
       type,
-      customer_id: raw.customer_id || `CUST-${Math.floor(1000 + Math.random() * 9000)}`,
+      customer_id: raw.customer_id || id,
       customer_name: raw.customer_name || 'Valued Customer',
-      customer_email: raw.customer_email || 'billing@customer.com',
-      customer_phone: raw.customer_phone || '+1 555-0199',
+      customer_email: raw.customer_email || 'billing@customer.in',
+      customer_phone: raw.customer_phone || '+91 9876543210',
       customer_tier: raw.customer_tier || 'smb',
       amount,
-      currency: raw.currency || 'USD',
+      currency: 'INR',
       timestamp: raw.timestamp || now,
       raw_payload: raw.raw_payload || {},
-      recoverability_score: Math.round(score),
+      risk_level: riskLevel,
+      recovery_probability: Math.round(prob),
       expected_recoverable_value: expectedValue,
       status: 'pending',
       current_stage: 'detect',
       outreach_count: raw.outreach_count || 0,
       do_not_contact: Boolean(raw.do_not_contact),
       quiet_hours_active: Boolean(raw.quiet_hours_active),
+      next_action: 'Ingested into AI Recovery Pipeline',
+      escalation_status: 'normal',
       audit_logs: [
         {
           id: `LOG-DET-${Date.now()}`,
@@ -58,9 +68,10 @@ export class DetectionEngine {
           event_id: id,
           stage: 'detect',
           actor: 'DETECTOR',
-          action_taken: 'EVENT_INGESTED_NORMALIZED',
-          description: `Normalized event ${id}. Value: $${amount}. Prioritized expected value: $${expectedValue}.`,
-          metadata: { amount, score }
+          action_taken: 'REVENUE_RISK_DETECTED',
+          description: `Normalized risk event ${id}. Value: ₹${amount.toLocaleString('en-IN')}. Prioritized value: ₹${expectedValue.toLocaleString('en-IN')}.`,
+          amount,
+          metadata: { amount, recovery_probability: prob }
         }
       ]
     };

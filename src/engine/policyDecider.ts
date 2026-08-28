@@ -14,80 +14,79 @@ export const POLICY_MATRIX: PolicyRule[] = [
   {
     id: 'POL-PAY-01',
     name: 'Expired Card Self-Serve Update Protocol',
-    target_root_causes: ['Expired Credit Card / Outdated Payment Credentials'],
-    action_type: 'payment_link',
+    target_root_causes: ['Expired Credit/Debit Card Credentials'],
+    action_type: 'email_reminder',
     max_discount_percent: 0,
-    max_outreach_attempts: 3,
+    max_outreach_attempts: 2,
     requires_human_review: false
   },
   {
     id: 'POL-PAY-02',
-    name: 'Transient Balance Payday Schedule Retry',
+    name: 'Transient Balance Smart Retry Schedule',
     target_root_causes: ['Transient Insufficient Funds (Payday Mismatch)'],
-    action_type: 'smart_retry',
+    action_type: 'payment_retry',
     max_discount_percent: 0,
     max_outreach_attempts: 2,
     requires_human_review: false
   },
   {
     id: 'POL-PAY-03',
-    name: '3DS Authentication Quick Re-entry',
-    target_root_causes: ['3DS Authentication Friction / Challenge Abandoned'],
-    action_type: 'payment_link',
+    name: '3DS Friction Quick WhatsApp Re-authentication',
+    target_root_causes: ['3DS OTP Authentication Friction / Challenge Abandoned'],
+    action_type: 'whatsapp_reminder',
     max_discount_percent: 0,
     max_outreach_attempts: 2,
     requires_human_review: false
   },
   {
-    id: 'POL-PAY-04',
-    name: 'Alternate Rail Nudge & Bank Inquiry',
-    target_root_causes: ['Issuer Security Block / Cross-Border Restriction'],
-    action_type: 'email_nudge',
-    max_discount_percent: 0,
+    id: 'POL-SUB-01',
+    name: 'Subscription Auto-Renewal Recovery Protocol',
+    target_root_causes: [
+      'Recurring e-Mandate Bank Processing Failure',
+      'Subscription Renewal Card Expiry'
+    ],
+    action_type: 'subscription_recovery',
+    max_discount_percent: 5,
     max_outreach_attempts: 2,
     requires_human_review: false
   },
   {
     id: 'POL-B2B-01',
-    name: 'B2B PO Dispute Human AR Escalation',
-    target_root_causes: ['Invoice Dispute / PO Line Item Mismatch'],
-    action_type: 'ar_human_task',
+    name: 'B2B PO Dispute Human AR Handoff',
+    target_root_causes: ['B2B Invoice Dispute / PO Line Item Mismatch'],
+    action_type: 'human_escalation',
     max_discount_percent: 0,
     max_outreach_attempts: 1,
     requires_human_review: true
   },
   {
     id: 'POL-B2B-02',
-    name: 'B2B Overdue Invoice Promise-to-Pay Sequence',
+    name: 'B2B Overdue Invoice Follow-up Sequence',
     target_root_causes: [
-      'Aged Invoice Cash-Flow Delay (15 Days Past Due)',
-      'Aged Invoice Cash-Flow Delay (30 Days Past Due)',
-      'Aged Invoice Cash-Flow Delay (45 Days Past Due)',
+      'Aged B2B Invoice Cash-Flow Delay (15 Days Past Due)',
+      'Aged B2B Invoice Cash-Flow Delay (30 Days Past Due)',
       'Stale / Bounced Accounts Payable Email Contact'
     ],
-    action_type: 'hinglish_voice',
+    action_type: 'invoice_followup',
     max_discount_percent: 0,
-    max_outreach_attempts: 3,
-    requires_human_review: false
-  },
-  {
-    id: 'POL-CHK-01',
-    name: 'Checkout Shipping Cost Incentive Nudge',
-    target_root_causes: ['Unexpected Shipping Cost Shock at Final Checkout Step'],
-    action_type: 'discount_nudge',
-    max_discount_percent: 10, // Cap at 10%
     max_outreach_attempts: 2,
     requires_human_review: false
   },
   {
-    id: 'POL-CHK-02',
-    name: 'Checkout Intent Time-Boxed SMS',
-    target_root_causes: [
-      'Variant Stock Uncertainty / Backorder Hesitation',
-      'General Checkout Abandonment / Intent Hesitation'
-    ],
-    action_type: 'sms_nudge',
-    max_discount_percent: 5,
+    id: 'POL-CHK-01',
+    name: 'Checkout Abandonment Recovery Incentive',
+    target_root_causes: ['Unexpected Delivery Fee / Payment Step Hesitation'],
+    action_type: 'checkout_recovery',
+    max_discount_percent: 10,
+    max_outreach_attempts: 2,
+    requires_human_review: false
+  },
+  {
+    id: 'POL-MND-01',
+    name: 'e-Mandate Bank Re-authorization Flow',
+    target_root_causes: ['e-Mandate Revoked / Cancelled by Customer Bank'],
+    action_type: 'whatsapp_reminder',
+    max_discount_percent: 0,
     max_outreach_attempts: 2,
     requires_human_review: false
   }
@@ -95,46 +94,51 @@ export const POLICY_MATRIX: PolicyRule[] = [
 
 export class PolicyDecisionEngine {
   /**
-   * Decides policy rule and drafts message within hard guardrails
+   * Decides policy rule, drafts bounded outreach message, and logs AI rationale
    */
   public decide(event: RevenueEvent, diagnosis: DiagnosisResult): PolicyDecision {
-    // 1. Policy Table Lookup
     const matchedPolicy = POLICY_MATRIX.find(p => 
       p.target_root_causes.some(rc => diagnosis.root_cause.includes(rc) || rc.includes(diagnosis.root_cause))
     ) || {
       id: 'POL-DEFAULT-01',
-      name: 'Default Payment Recovery Protocol',
+      name: 'Default Revenue Recovery Protocol',
       target_root_causes: ['Default'],
-      action_type: 'email_nudge' as ActionType,
+      action_type: 'email_reminder' as ActionType,
       max_discount_percent: 0,
       max_outreach_attempts: 2,
       requires_human_review: false
     };
 
-    let chosenAction = matchedPolicy.action_type;
-    let proposedIncentive = matchedPolicy.max_discount_percent > 0 ? Math.min(matchedPolicy.max_discount_percent, 10) : 0;
+    const chosenAction = matchedPolicy.action_type;
+    const proposedIncentive = matchedPolicy.max_discount_percent > 0 ? matchedPolicy.max_discount_percent : 0;
+    
     let draftMessage = '';
-    let hinglishScript = '';
+    let whatsappScript = '';
 
-    // 2. Bounded Content Draft Generation
-    if (chosenAction === 'payment_link') {
-      draftMessage = `Hi ${event.customer_name}, we noticed a temporary payment issue updating your subscription ($${event.amount}). Please click here to securely update your payment method in 30 seconds: https://pay.recovery-agent.io/update/${event.id}`;
-    } else if (chosenAction === 'smart_retry') {
-      draftMessage = `Payment retry scheduled automatically for ${event.customer_name} ($${event.amount}) aligned with bank settlement window on 1st of month. No customer outreach required at this step.`;
-    } else if (chosenAction === 'ar_human_task') {
-      draftMessage = `[HUMAN AR ESCALATION] High-value invoice dispute detected for ${event.customer_name} ($${event.amount}). Created urgent ticket in AR Queue for manual review.`;
-    } else if (chosenAction === 'hinglish_voice') {
-      draftMessage = `Dear ${event.customer_name}, your invoice #${event.raw_payload.invoice_id || 'INV-2026'} of $${event.amount} is currently past due date. Kindly confirm payment schedule via our portal or reply to capture a Promise-to-Pay commitment.`;
-      hinglishScript = `Namaste ${event.customer_name} ji, main ${event.customer_name.split(' ')[0]} se baat kar raha hoon. Aapka invoice $${event.amount} overdue hai. Kya aap aaj Shaam tak ya Monday tak payment confirm kar sakte hain? Hum link SMS pe bhej rahe hain. Dhanyawad!`;
-    } else if (chosenAction === 'discount_nudge') {
-      draftMessage = `Hi ${event.customer_name}, we saved your cart ($${event.amount})! Complete your checkout in the next 24 hours and get ${proposedIncentive}% off shipping fees using code RECOVER10: https://checkout.recovery-agent.io/cart/${event.id}`;
-    } else if (chosenAction === 'sms_nudge') {
-      draftMessage = `Hey ${event.customer_name}, your order ($${event.amount}) is waiting! Complete your order today before stock runs out: https://checkout.recovery-agent.io/${event.id}`;
+    const formattedAmount = `₹${event.amount.toLocaleString('en-IN')}`;
+
+    if (chosenAction === 'payment_retry') {
+      draftMessage = `[Payment Retry Scheduled] PSP retry queued for ${event.customer_name} (${formattedAmount}). Aligned with bank 24h settlement window. No customer disturbance needed.`;
+    } else if (chosenAction === 'email_reminder') {
+      draftMessage = `Dear ${event.customer_name}, we noticed a temporary payment issue processing your invoice of ${formattedAmount}. Please update your payment details here: https://pay.recovery-agent.io/update/${event.id}`;
+    } else if (chosenAction === 'whatsapp_reminder') {
+      draftMessage = `Hi ${event.customer_name}, your payment of ${formattedAmount} requires quick 1-click verification. Tap here to complete securely: https://pay.recovery-agent.io/wa/${event.id}`;
+      whatsappScript = `Namaste ${event.customer_name} ji! Aapka payment ${formattedAmount} complete nahi ho paya tha. 1-click verify karne ke liye is secure link par tap karein: https://pay.recovery-agent.io/wa/${event.id}`;
+    } else if (chosenAction === 'checkout_recovery') {
+      draftMessage = `Hi ${event.customer_name}, we saved your cart of ${formattedAmount}! Complete your purchase in the next 24h and get free express shipping with code RECOVER10: https://checkout.recovery-agent.io/cart/${event.id}`;
+    } else if (chosenAction === 'subscription_recovery') {
+      draftMessage = `Hi ${event.customer_name}, your subscription renewal (${formattedAmount}) failed due to card update requirement. Re-activate in 30 seconds: https://sub.recovery-agent.io/renew/${event.id}`;
+    } else if (chosenAction === 'invoice_followup') {
+      draftMessage = `Hello ${event.customer_name}, invoice #${event.raw_payload.invoice_id || 'INV-2026'} of ${formattedAmount} is past due date. Kindly confirm payment schedule or submit a Promise-to-Pay: https://ar.recovery-agent.io/invoice/${event.id}`;
     } else {
-      draftMessage = `Hello ${event.customer_name}, we encountered an issue processing your transaction of $${event.amount}. Please review your billing portal to complete payment.`;
+      // human_escalation
+      draftMessage = `[HUMAN AR ESCALATION] High-value B2B invoice dispute detected for ${event.customer_name} (${formattedAmount}). Task created in Jira / HubSpot AR Queue.`;
     }
 
-    const llmRationale = `Matched Policy Rule '${matchedPolicy.id}: ${matchedPolicy.name}' based on diagnosed root cause '${diagnosis.root_cause}'. Action bounded to '${chosenAction}' with capped incentive ${proposedIncentive}%.`;
+    const whyThisAction = diagnosis.why_this_action || 
+      `Customer has high payment reliability. Diagnosed root cause: '${diagnosis.root_cause}'. The AI agent automatically selected intervention '${chosenAction}' with confidence ${diagnosis.confidence}%.`;
+
+    const llmRationale = `Matched Policy '${matchedPolicy.id}: ${matchedPolicy.name}' based on diagnosed root cause '${diagnosis.root_cause}'. Action bounded to '${chosenAction}'.`;
 
     return {
       policy_id: matchedPolicy.id,
@@ -142,7 +146,9 @@ export class PolicyDecisionEngine {
       chosen_action_type: chosenAction,
       proposed_incentive_percent: proposedIncentive > 0 ? proposedIncentive : undefined,
       draft_message: draftMessage,
-      hinglish_voice_script: hinglishScript || undefined,
+      whatsapp_script: whatsappScript || undefined,
+      why_this_action: whyThisAction,
+      confidence: diagnosis.confidence,
       llm_rationale: llmRationale
     };
   }

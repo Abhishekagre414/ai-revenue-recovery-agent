@@ -1,140 +1,187 @@
-import { RevenueEvent } from '../types/recovery';
+import { RevenueEvent, LeakType, RiskLevel } from '../types/recovery';
 
-const FIRST_NAMES = ['Aarav', 'Neha', 'Rohan', 'Priya', 'Vikram', 'Ananya', 'Rahul', 'Sneha', 'Kabir', 'Tanvi', 'Marcus', 'Elena', 'David', 'Sophia', 'Chen'];
-const LAST_NAMES = ['Sharma', 'Gupta', 'Patel', 'Verma', 'Mehta', 'Singh', 'Reddy', 'Chawla', 'Deshmukh', 'Joshi', 'Vance', 'Schneider', 'Miller', 'Tanaka', 'Zhao'];
-const COMPANIES = ['Acme Corp', 'Nexus Technologies', 'Starlight SaaS', 'OmniLogistics India', 'Vortex AI', 'CloudScale Inc', 'Apex Digital', 'Zenith Retail', 'Hyperion Dynamics', 'Nova Labs'];
+const FIRST_NAMES = ['Aarav', 'Neha', 'Rohan', 'Priya', 'Vikram', 'Ananya', 'Rahul', 'Sneha', 'Kabir', 'Tanvi', 'Aditya', 'Meera', 'Karan', 'Isha', 'Dev'];
+const LAST_NAMES = ['Sharma', 'Gupta', 'Patel', 'Verma', 'Mehta', 'Singh', 'Reddy', 'Chawla', 'Deshmukh', 'Joshi', 'Kapoor', 'Nair', 'Bhasin', 'Bhatia', 'Malhotra'];
+const COMPANIES = ['Apex Digital India', 'Nexus Cloud Solutions', 'Vortex Commerce', 'OmniLogistics Pvt Ltd', 'Starlight Tech', 'Zeta Pay', 'Nova Enterprises', 'Hyperion Software', 'Zenith Retail', 'Kriti Fashion Lab'];
 
-export const generateSyntheticEvents = (count: number = 200): RevenueEvent[] => {
+export const generateSyntheticEvents = (count: number = 100): RevenueEvent[] => {
   const events: RevenueEvent[] = [];
   const now = Date.now();
 
+  // We want to generate ~100 realistic cases with total risk ~₹8,20,000
+  // Distribution across 5 scenarios:
+  // 1. payment_failure (25 cases)
+  // 2. failed_subscription (25 cases)
+  // 3. overdue_invoice (20 cases)
+  // 4. checkout_abandonment (15 cases)
+  // 5. mandate_failure (15 cases)
+
   for (let i = 1; i <= count; i++) {
-    const isPaymentDegradation = i <= 100;
-    const isB2BReceivable = i > 100 && i <= 160;
-    const isCheckoutAbandonment = i > 160;
+    let type: LeakType;
+    if (i <= 25) type = 'payment_failure';
+    else if (i <= 50) type = 'failed_subscription';
+    else if (i <= 70) type = 'overdue_invoice';
+    else if (i <= 85) type = 'checkout_abandonment';
+    else type = 'mandate_failure';
 
     const firstName = FIRST_NAMES[i % FIRST_NAMES.length];
     const lastName = LAST_NAMES[(i * 3) % LAST_NAMES.length];
-    const customerName = isB2BReceivable 
+    const isEnterprise = type === 'overdue_invoice' || (i % 4 === 0);
+    const customerName = isEnterprise 
       ? `${firstName} ${lastName} (${COMPANIES[i % COMPANIES.length]})`
       : `${firstName} ${lastName}`;
     
-    const email = `${firstName.toLowerCase()}.${lastName.toLowerCase()}${i}@${isB2BReceivable ? 'enterprise.co' : 'gmail.com'}`;
-    const phone = `+91 ${9800000000 + (i * 12345) % 899999999}`;
-    
-    // Select customer tier
-    const tier = isB2BReceivable 
-      ? (i % 3 === 0 ? 'enterprise' : 'growth') 
-      : (i % 4 === 0 ? 'growth' : 'smb');
+    const email = `${firstName.toLowerCase()}.${lastName.toLowerCase()}${i}@${isEnterprise ? 'enterprise.co.in' : 'gmail.com'}`;
+    const phone = `+91 ${9820000000 + (i * 98765) % 899999999}`;
+    const tier = isEnterprise ? (i % 2 === 0 ? 'enterprise' : 'growth') : (i % 3 === 0 ? 'smb' : 'b2c');
 
-    let type: RevenueEvent['type'];
     let amount: number;
     let rawPayload: Record<string, any>;
+    let baseProbability: number;
+    let riskLevel: RiskLevel;
 
-    if (isPaymentDegradation) {
-      type = 'payment_degradation';
-      amount = Math.round((50 + (i * 73) % 2450) * 100) / 100;
-      
-      const declineReasons = [
-        { code: 'expired_card', msg: 'Your card has expired. Update details.', recoverability: 92 },
-        { code: 'insufficient_funds', msg: 'Soft decline: Insufficient funds in card account.', recoverability: 78 },
-        { code: 'issuer_block', msg: 'Decline code 05: Do Not Honor by issuing bank.', recoverability: 45 },
-        { code: '3ds_friction', msg: 'Authentication required. 3DS challenge timeout.', recoverability: 85 },
-        { code: 'currency_mismatch', msg: 'Cross-border transaction disabled on consumer card.', recoverability: 68 }
+    if (type === 'payment_failure') {
+      // Amounts between ₹2,000 and ₹25,000
+      amount = Math.round((2000 + (i * 850) % 23000));
+      const declineCodes = [
+        { code: 'insufficient_funds', msg: 'Soft decline: Insufficient funds in bank account.', prob: 87, risk: 'MEDIUM' as RiskLevel },
+        { code: 'expired_card', msg: 'Card expired or debit mandate expired.', prob: 92, risk: 'LOW' as RiskLevel },
+        { code: '3ds_timeout', msg: '3DS OTP step timed out on customer device.', prob: 84, risk: 'LOW' as RiskLevel },
+        { code: 'issuer_do_not_honor', msg: 'Decline code 05: Do Not Honor by issuing bank.', prob: 52, risk: 'HIGH' as RiskLevel }
       ];
-      const selected = declineReasons[i % declineReasons.length];
-
+      const codeSel = declineCodes[i % declineCodes.length];
+      baseProbability = codeSel.prob;
+      riskLevel = codeSel.risk;
       rawPayload = {
-        gateway: i % 2 === 0 ? 'Stripe Test Rail' : 'Razorpay Sandbox',
-        decline_code: selected.code,
-        decline_message: selected.msg,
+        gateway: i % 2 === 0 ? 'Razorpay Production Rail' : 'Cashfree Payments Sandbox',
+        decline_code: codeSel.code,
+        decline_message: codeSel.msg,
         card_brand: i % 2 === 0 ? 'Visa' : 'Mastercard',
-        last4: `${1000 + (i * 7) % 8999}`,
-        attempt_number: (i % 3) + 1,
-        support_ticket_transcript: i % 5 === 0 ? `Customer notes: "I got a new card last week, haven't updated it yet."` : null
+        last4: `${4000 + (i * 17) % 5000}`,
+        attempt_number: (i % 2) + 1,
+        support_ticket: i % 7 === 0 ? 'Customer reported app crash during payment' : null
       };
-    } else if (isB2BReceivable) {
-      type = 'b2b_receivables';
-      amount = Math.round((1200 + (i * 350) % 18800) * 100) / 100;
-      
-      const invoiceReasons = [
-        { status: 'overdue_30', msg: 'Invoice past 30 days due date.', recoverability: 88 },
-        { status: 'po_dispute', msg: 'Client stated PO line item #3 does not match delivered SOW.', recoverability: 60 },
-        { status: 'wrong_ap_contact', msg: 'Accounts Payable bouncing email. Bounce code 550.', recoverability: 80 },
-        { status: 'cash_flow_delay', msg: 'Customer requested 15-day grace period for quarter-end audit.', recoverability: 75 }
-      ];
-      const selected = invoiceReasons[i % invoiceReasons.length];
 
+    } else if (type === 'failed_subscription') {
+      // Amounts between ₹999 and ₹14,999
+      amount = Math.round((999 + (i * 620) % 14000));
+      const subReasons = [
+        { code: 'recurring_mandate_failed', msg: 'Auto-debit mandate failed: Bank processing error.', prob: 88, risk: 'LOW' as RiskLevel },
+        { code: 'card_expired', msg: 'Subscription renewal failed due to expired card.', prob: 91, risk: 'LOW' as RiskLevel },
+        { code: 'daily_limit_exceeded', msg: 'Customer bank daily transaction limit exceeded.', prob: 79, risk: 'MEDIUM' as RiskLevel }
+      ];
+      const sel = subReasons[i % subReasons.length];
+      baseProbability = sel.prob;
+      riskLevel = sel.risk;
+      rawPayload = {
+        subscription_id: `SUB-2026-${3000 + i}`,
+        plan_name: i % 2 === 0 ? 'SaaS Enterprise Growth Annual' : 'Pro Business Monthly',
+        renewal_date: new Date(now - (i % 5) * 86400000).toISOString().split('T')[0],
+        failure_code: sel.code,
+        internal_notes: sel.msg
+      };
+
+    } else if (type === 'overdue_invoice') {
+      // High B2B amounts: ₹25,000 to ₹1,20,000
+      amount = Math.round((25000 + (i * 4700) % 95000));
+      const invReasons = [
+        { status: 'overdue_15_days', msg: 'Invoice past 15 days due date.', prob: 85, risk: 'MEDIUM' as RiskLevel },
+        { status: 'po_dispute', msg: 'Client accounts payable flagged PO line item mismatch.', prob: 48, risk: 'HIGH' as RiskLevel },
+        { status: 'ap_bounce', msg: 'Accounts payable bounce code 550 email fail.', prob: 78, risk: 'MEDIUM' as RiskLevel }
+      ];
+      const sel = invReasons[i % invReasons.length];
+      baseProbability = sel.prob;
+      riskLevel = sel.risk;
       rawPayload = {
         invoice_id: `INV-2026-${1000 + i}`,
-        due_date: new Date(now - (15 + (i % 45)) * 86400000).toISOString().split('T')[0],
-        days_past_due: 15 + (i % 45),
-        po_number: `PO-88${i}`,
+        due_date: new Date(now - (15 + (i % 30)) * 86400000).toISOString().split('T')[0],
+        days_past_due: 15 + (i % 30),
+        po_number: `PO-IND-${880 + i}`,
         ap_email: email,
-        internal_notes: selected.msg,
-        has_open_dispute: selected.status === 'po_dispute'
+        internal_notes: sel.msg,
+        has_dispute: sel.status === 'po_dispute'
       };
-    } else {
-      type = 'checkout_abandonment';
-      amount = Math.round((80 + (i * 29) % 820) * 100) / 100;
-      
-      const cartReasons = [
-        { reason: 'shipping_shock', msg: 'Cart abandoned at shipping step after calculating Express Delivery fee.', recoverability: 82 },
-        { reason: 'price_hesitation', msg: 'Customer viewed coupon input 4 times before exiting.', recoverability: 74 },
-        { reason: 'out_of_stock_variant', msg: 'Customer tried selecting Blue XL which became backordered.', recoverability: 65 }
-      ];
-      const selected = cartReasons[i % cartReasons.length];
 
+    } else if (type === 'checkout_abandonment') {
+      // Amounts ₹1,500 to ₹18,000
+      amount = Math.round((1500 + (i * 1100) % 16500));
+      const cartReasons = [
+        { reason: 'delivery_fee_dropoff', msg: 'Cart abandoned after express delivery fee calculated.', prob: 82, risk: 'LOW' as RiskLevel },
+        { reason: 'payment_gateway_hesitation', msg: 'Customer stayed on UPI QR page for 3 mins then closed window.', prob: 75, risk: 'MEDIUM' as RiskLevel }
+      ];
+      const sel = cartReasons[i % cartReasons.length];
+      baseProbability = sel.prob;
+      riskLevel = sel.risk;
       rawPayload = {
-        cart_id: `CART-99${i}`,
-        items: [{ id: `PROD-${i}`, name: 'Premium Cloud Subscription / Enterprise Add-on', qty: 1 }],
-        abandoned_step: selected.reason === 'shipping_shock' ? 'shipping_method' : 'checkout_payment',
-        time_elapsed_minutes: 45 + (i % 120),
-        session_notes: selected.msg
+        cart_id: `CART-IND-${900 + i}`,
+        items: [{ id: `PROD-${i}`, name: 'Premium AI Suite Membership', qty: 1 }],
+        abandoned_step: 'payment_method',
+        idle_time_mins: 25 + (i % 90),
+        session_notes: sel.msg
+      };
+
+    } else {
+      // mandate_failure: ₹3,500 to ₹35,000
+      amount = Math.round((3500 + (i * 2100) % 31000));
+      const mandateReasons = [
+        { code: 'e_mandate_revoked', msg: 'e-Mandate cancelled or revoked by customer bank.', prob: 45, risk: 'HIGH' as RiskLevel },
+        { code: 'account_dormant', msg: 'Bank account dormant or inactive for NACH auto-debit.', prob: 60, risk: 'HIGH' as RiskLevel },
+        { code: 'nach_technical_reject', msg: 'NPCI NACH technical failure / bank server timeout.', prob: 86, risk: 'LOW' as RiskLevel }
+      ];
+      const sel = mandateReasons[i % mandateReasons.length];
+      baseProbability = sel.prob;
+      riskLevel = sel.risk;
+      rawPayload = {
+        mandate_id: `MND-2026-${700 + i}`,
+        bank_name: i % 2 === 0 ? 'HDFC Bank' : 'ICICI Bank',
+        failure_reason: sel.code,
+        notes: sel.msg
       };
     }
 
-    // Baseline recoverability score
-    const baseScore = type === 'payment_degradation' ? 82 : type === 'b2b_receivables' ? 76 : 70;
-    const scoreModifier = (i * 13) % 25 - 12;
-    const recoverability_score = Math.max(20, Math.min(98, baseScore + scoreModifier));
-    const expected_recoverable_value = Math.round(amount * (recoverability_score / 100) * 100) / 100;
+    const recoveryProbability = Math.max(30, Math.min(96, baseProbability));
+    const expectedValue = Math.round(amount * (recoveryProbability / 100));
 
-    // Outbound history simulation
-    const outreachCount = i % 4 === 0 ? 2 : i % 5 === 0 ? 3 : i % 7 === 0 ? 1 : 0;
-    const doNotContact = i === 12 || i === 44 || i === 105; // edge cases for guardrails
-    const quietHours = i % 11 === 0;
+    const outreachCount = i % 5 === 0 ? 2 : i % 7 === 0 ? 1 : 0;
+    const doNotContact = i === 18 || i === 54; // specific guardrail test cases
+    const quietHours = i % 13 === 0;
+
+    let nextAction = 'Ready for AI Agent Batch Run';
 
     events.push({
-      id: `EVT-${1000 + i}`,
+      id: `CUST-${1000 + i}`,
       type,
-      customer_id: `CUST-${500 + i}`,
+      customer_id: `CUST-${1000 + i}`,
       customer_name: customerName,
       customer_email: email,
       customer_phone: phone,
       customer_tier: tier,
       amount,
-      currency: 'USD',
-      timestamp: new Date(now - (i * 3600000)).toISOString(),
+      currency: 'INR',
+      timestamp: new Date(now - (i * 2400000)).toISOString(),
       raw_payload: rawPayload,
-      recoverability_score,
-      expected_recoverable_value,
+      risk_level: riskLevel,
+      recovery_probability: recoveryProbability,
+      expected_recoverable_value: expectedValue,
       status: 'pending',
       current_stage: 'detect',
       outreach_count: outreachCount,
       last_outreach_at: outreachCount > 0 ? new Date(now - (outreachCount * 43200000)).toISOString() : undefined,
       do_not_contact: doNotContact,
       quiet_hours_active: quietHours,
+      next_action: nextAction,
+      escalation_status: 'normal',
       audit_logs: [
         {
           id: `LOG-DET-${i}`,
-          timestamp: new Date(now - (i * 3600000)).toISOString(),
-          event_id: `EVT-${1000 + i}`,
+          timestamp: new Date(now - (i * 2400000)).toISOString(),
+          event_id: `CUST-${1000 + i}`,
           stage: 'detect',
           actor: 'DETECTOR',
-          action_taken: 'EVENT_INGESTED',
-          description: `Ingested ${type} event. Amount: $${amount}. Prioritized value: $${expected_recoverable_value}.`,
-          metadata: { amount, recoverability_score }
+          action_taken: 'REVENUE_RISK_DETECTED',
+          description: `Detected ${type.replace('_', ' ')} risk for ${customerName}. Amount: ₹${amount.toLocaleString('en-IN')}. Prioritized value: ₹${expectedValue.toLocaleString('en-IN')}.`,
+          amount,
+          metadata: { amount, recoveryProbability }
         }
       ]
     });
