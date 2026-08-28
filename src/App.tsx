@@ -7,8 +7,9 @@ import { policyDecider } from './engine/policyDecider';
 import { stoppingRules } from './engine/stoppingRules';
 import { actuator } from './engine/actuator';
 
-import { Header } from './components/Header';
+import { Header, NavTab } from './components/Header';
 import { HeroBanner } from './components/HeroBanner';
+import { OnboardingGuide } from './components/OnboardingGuide';
 import { BatchWorkflowTracker } from './components/BatchWorkflowTracker';
 import { LiveActivityPanel } from './components/LiveActivityPanel';
 import { MetricsOverview } from './components/MetricsOverview';
@@ -19,18 +20,30 @@ import { ComplianceGuardrailsView } from './components/ComplianceGuardrailsView'
 import { AnalyticsCharts } from './components/AnalyticsCharts';
 import { AuditTrailView } from './components/AuditTrailView';
 import { AddEventModal } from './components/AddEventModal';
+import { ActionConfirmationModal } from './components/ActionConfirmationModal';
+import { SettingsView } from './components/SettingsView';
+import { CheckCircle2, AlertTriangle, X } from 'lucide-react';
 
 export function App() {
   // State initialization with 100 cases by default
   const [events, setEvents] = useState<RevenueEvent[]>(() => generateSyntheticEvents(100));
   const [isRunning, setIsRunning] = useState(false);
   const [selectedCase, setSelectedCase] = useState<RevenueEvent | null>(null);
-  const [activeTab, setActiveTab] = useState<'pipeline' | 'compliance' | 'analytics' | 'audit'>('pipeline');
+  
+  // Navigation Tabs: 'overview' | 'agent' | 'customers' | 'revenue' | 'audit' | 'settings'
+  const [activeTab, setActiveTab] = useState<NavTab>('overview');
   const [selectedStageFilter, setSelectedStageFilter] = useState<Stage | 'all'>('all');
   const [killSwitchActive, setKillSwitchActive] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(true);
   const [globalAuditLogs, setGlobalAuditLogs] = useState<AuditLogEntry[]>([]);
   
+  // Action confirmation modal state
+  const [confirmModalData, setConfirmModalData] = useState<{ event: RevenueEvent; action: string } | null>(null);
+
+  // Feedback Toast Notification State (Requirement #11)
+  const [feedbackToast, setFeedbackToast] = useState<{ message: string; type: 'success' | 'info' | 'recovered' } | null>(null);
+
   // Real-time batch processing tracker state
   const [activeProcessingEvent, setActiveProcessingEvent] = useState<RevenueEvent | null>(null);
   const [currentStepIndex, setCurrentStepIndex] = useState<number>(0);
@@ -117,6 +130,7 @@ export function App() {
         if (targetIndex === -1) {
           setIsRunning(false);
           setActiveProcessingEvent(null);
+          triggerToast('🎉 All batch cases processed! Recovery completed.', 'success');
           return prevEvents;
         }
 
@@ -213,6 +227,10 @@ export function App() {
               : `Executed connector '${act.connector}'. Status: ${event.status.toUpperCase()}.`,
             amount: isRecovered ? event.amount : undefined
           });
+
+          if (isRecovered) {
+            triggerToast(`🟢 ${formattedAmount} Recovered for ${event.customer_name}! Workflow automatically stopped.`, 'recovered');
+          }
         }
 
         setCurrentStepIndex(9);
@@ -232,14 +250,25 @@ export function App() {
 
         return updated;
       });
-    }, 280); // Smooth batch processing pace for live judging demo
+    }, 300);
 
     return () => clearInterval(interval);
   }, [isRunning, selectedCase]);
 
+  // Toast Helper
+  const triggerToast = (message: string, type: 'success' | 'info' | 'recovered' = 'info') => {
+    setFeedbackToast({ message, type });
+    setTimeout(() => setFeedbackToast(null), 4000);
+  };
+
   // Event Handlers
   const handleToggleRun = () => {
-    setIsRunning(r => !r);
+    const next = !isRunning;
+    setIsRunning(next);
+    if (next) {
+      setActiveTab('agent');
+      triggerToast('▶ Recovery Agent started batch processing!', 'info');
+    }
   };
 
   const handleResetDemo = () => {
@@ -252,19 +281,24 @@ export function App() {
     fresh.forEach(e => logs.push(...e.audit_logs));
     setGlobalAuditLogs(logs);
     setSelectedCase(null);
+    triggerToast('Demo reset to 100 fresh recovery cases.', 'info');
   };
 
   const handleToggleKillSwitch = () => {
     const next = !killSwitchActive;
     setKillSwitchActive(next);
     stoppingRules.setGlobalKillSwitch(next);
-    if (next) setIsRunning(false);
+    if (next) {
+      setIsRunning(false);
+      triggerToast('🛑 Emergency Kill Switch engaged by administrator!', 'info');
+    }
   };
 
   const handleAddEvent = (rawEvt: Partial<RevenueEvent>) => {
     const norm = detector.normalizeEvent(rawEvt);
     setEvents(prev => [norm, ...prev]);
     setGlobalAuditLogs(g => [...g, ...norm.audit_logs]);
+    triggerToast(`Added new case: ${norm.customer_name} (₹${norm.amount.toLocaleString('en-IN')})`, 'success');
   };
 
   const handleUpdateStatus = (eventId: string, newStatus: TerminalState) => {
@@ -278,6 +312,7 @@ export function App() {
       }
       return e;
     }));
+    triggerToast(`Updated status to ${newStatus.replace('_', ' ').toUpperCase()}`, 'success');
   };
 
   const handleTriggerMockViolation = (type: 'discount' | 'frequency' | 'quiethours' | 'optout') => {
@@ -336,10 +371,14 @@ export function App() {
     setEvents(prev => [mockEvt, ...prev]);
     setGlobalAuditLogs(g => [...g, ...mockEvt.audit_logs]);
     setActiveProcessingEvent(mockEvt);
+    triggerToast(`Intercepted ${type} violation! Guardrail rule enforced.`, 'info');
   };
 
   const scrollToActivity = () => {
-    activityPanelRef.current?.scrollIntoView({ behavior: 'smooth' });
+    setActiveTab('agent');
+    setTimeout(() => {
+      activityPanelRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
   };
 
   const processedCount = events.filter(e => e.status !== 'pending').length;
@@ -347,7 +386,26 @@ export function App() {
   return (
     <div className="min-h-screen flex flex-col bg-[#070B14] text-slate-100 selection:bg-blue-500 selection:text-white pb-16 font-sans">
       
-      {/* Top Header Bar */}
+      {/* Feedback Toast Banner (Requirement #11) */}
+      {feedbackToast && (
+        <div className="fixed bottom-6 right-6 z-50 animate-fadeIn">
+          <div className={`p-4 rounded-2xl border shadow-2xl flex items-center gap-3 text-xs font-bold ${
+            feedbackToast.type === 'recovered'
+              ? 'bg-emerald-950 text-emerald-200 border-emerald-500/50 shadow-emerald-500/20'
+              : feedbackToast.type === 'success'
+              ? 'bg-blue-950 text-blue-200 border-blue-500/50 shadow-blue-500/20'
+              : 'bg-slate-900 text-slate-200 border-slate-700'
+          }`}>
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span>{feedbackToast.message}</span>
+            <button onClick={() => setFeedbackToast(null)} className="ml-2 text-slate-400 hover:text-white">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Top Navigation Header */}
       <Header
         isRunning={isRunning}
         onToggleRun={handleToggleRun}
@@ -364,62 +422,113 @@ export function App() {
       {/* Main Container */}
       <main className="max-w-7xl w-full mx-auto px-4 lg:px-8 py-6 space-y-6 flex-1">
         
-        {/* Hero Landing Banner */}
-        <HeroBanner
-          summary={summary}
-          isRunning={isRunning}
-          onRunAgent={handleToggleRun}
-          onViewActivity={scrollToActivity}
-          onResetDemo={handleResetDemo}
-        />
-
-        {/* 10-Step Batch Progress Bar & Summary Counters */}
-        <BatchWorkflowTracker
-          isRunning={isRunning}
-          currentStepIndex={currentStepIndex}
-          summary={summary}
-        />
-
-        {/* Live Agent Activity Panel (🤖 Recovery Agent Activity) */}
-        <div ref={activityPanelRef}>
-          <LiveActivityPanel
-            currentEvent={activeProcessingEvent}
-            totalEvents={events.length}
-            processedCount={processedCount}
-            isRunning={isRunning}
-          />
-        </div>
-
-        {/* KPI Metrics Dashboard Overview (Strong ₹ Recovered prominence) */}
-        <MetricsOverview summary={summary} />
-
-        {/* BEFORE vs AFTER AI Visual Comparison Flowchart */}
-        <BeforeAfterSection summary={summary} />
-
-        {/* Tab Views */}
-        {activeTab === 'pipeline' && (
-          <QueueTable
-            events={events}
-            onSelectCase={(evt) => setSelectedCase(evt)}
-            selectedStageFilter={selectedStageFilter}
+        {/* Onboarding Guide (Requirement #5) */}
+        {showOnboarding && (
+          <OnboardingGuide
+            onClose={() => setShowOnboarding(false)}
+            onRunAgent={handleToggleRun}
           />
         )}
 
-        {activeTab === 'compliance' && (
-          <ComplianceGuardrailsView
-            onTriggerMockViolation={handleTriggerMockViolation}
-            killSwitchActive={killSwitchActive}
-            onToggleKillSwitch={handleToggleKillSwitch}
-            blockedCount={summary.blocked_guardrails_count}
-          />
+        {/* 🏠 OVERVIEW TAB */}
+        {activeTab === 'overview' && (
+          <div className="space-y-6">
+            <HeroBanner
+              summary={summary}
+              isRunning={isRunning}
+              onRunAgent={handleToggleRun}
+              onViewActivity={scrollToActivity}
+              onResetDemo={handleResetDemo}
+            />
+
+            <MetricsOverview summary={summary} />
+
+            <BeforeAfterSection summary={summary} />
+
+            {/* Quick Customer Table */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-white">Recent At-Risk Cases</h3>
+                <button
+                  onClick={() => setActiveTab('customers')}
+                  className="text-xs text-blue-400 hover:underline font-semibold"
+                >
+                  View All Customers →
+                </button>
+              </div>
+              <QueueTable
+                events={events}
+                onSelectCase={(evt) => setSelectedCase(evt)}
+                selectedStageFilter={selectedStageFilter}
+              />
+            </div>
+          </div>
         )}
 
-        {activeTab === 'analytics' && (
-          <AnalyticsCharts summary={summary} />
+        {/* 🤖 RECOVERY AGENT TAB */}
+        {activeTab === 'agent' && (
+          <div className="space-y-6">
+            <BatchWorkflowTracker
+              isRunning={isRunning}
+              currentStepIndex={currentStepIndex}
+              summary={summary}
+            />
+
+            <div ref={activityPanelRef}>
+              <LiveActivityPanel
+                currentEvent={activeProcessingEvent}
+                totalEvents={events.length}
+                processedCount={processedCount}
+                isRunning={isRunning}
+              />
+            </div>
+
+            <ComplianceGuardrailsView
+              onTriggerMockViolation={handleTriggerMockViolation}
+              killSwitchActive={killSwitchActive}
+              onToggleKillSwitch={handleToggleKillSwitch}
+              blockedCount={summary.blocked_guardrails_count}
+            />
+          </div>
         )}
 
+        {/* 👥 CUSTOMERS TAB */}
+        {activeTab === 'customers' && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-black text-white">👥 Customer Recovery List</h2>
+                <p className="text-xs text-slate-400 mt-0.5">Filter and inspect individual customer recovery cases.</p>
+              </div>
+            </div>
+
+            <QueueTable
+              events={events}
+              onSelectCase={(evt) => setSelectedCase(evt)}
+              selectedStageFilter={selectedStageFilter}
+            />
+          </div>
+        )}
+
+        {/* 💰 REVENUE TAB */}
+        {activeTab === 'revenue' && (
+          <div className="space-y-6">
+            <MetricsOverview summary={summary} />
+            <AnalyticsCharts summary={summary} />
+          </div>
+        )}
+
+        {/* 📋 AUDIT TRAIL TAB */}
         {activeTab === 'audit' && (
           <AuditTrailView logs={globalAuditLogs} />
+        )}
+
+        {/* ⚙️ SETTINGS TAB */}
+        {activeTab === 'settings' && (
+          <SettingsView
+            killSwitchActive={killSwitchActive}
+            onToggleKillSwitch={handleToggleKillSwitch}
+          />
         )}
 
       </main>
@@ -430,6 +539,20 @@ export function App() {
         onClose={() => setSelectedCase(null)}
         onUpdateStatus={handleUpdateStatus}
       />
+
+      {/* Manual Action Confirmation Modal (Requirement #10) */}
+      {confirmModalData && (
+        <ActionConfirmationModal
+          event={confirmModalData.event}
+          actionType={confirmModalData.action}
+          onClose={() => setConfirmModalData(null)}
+          onConfirm={() => {
+            handleUpdateStatus(confirmModalData.event.id, 'actioned');
+            triggerToast(`✅ Sent ${confirmModalData.action.replace('_', ' ')} for ${confirmModalData.event.customer_name}`, 'success');
+            setConfirmModalData(null);
+          }}
+        />
+      )}
 
       {/* Add Custom Risk Event Modal */}
       {isAddModalOpen && (

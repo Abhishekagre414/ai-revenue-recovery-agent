@@ -1,5 +1,5 @@
 import React from 'react';
-import { Play, Activity, RotateCcw, Sparkles, TrendingUp, ShieldCheck, Zap } from 'lucide-react';
+import { Play, Activity, RotateCcw, Sparkles, CheckCircle2 } from 'lucide-react';
 import { BatchSummary } from '../types/recovery';
 
 interface HeroBannerProps {
@@ -26,7 +26,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
 
   return (
     <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#0D1527] via-[#111A33] to-[#0A1021] border border-blue-900/40 p-6 lg:p-8 shadow-2xl">
-      {/* Background Subtle Accent Glows */}
+      {/* Subtle Glows */}
       <div className="absolute -top-24 -right-24 w-96 h-96 bg-blue-600/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-emerald-600/10 rounded-full blur-3xl pointer-events-none" />
 
@@ -36,7 +36,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 text-xs font-semibold">
             <Sparkles className="w-3.5 h-3.5" />
-            Track 03 • AI Revenue Recovery Agent
+            AI Revenue Recovery Engine
           </div>
 
           <div className="flex items-center gap-2">
@@ -56,7 +56,7 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
         </div>
 
         {/* Hero Title & Subtitle */}
-        <div className="max-w-4xl space-y-3">
+        <div className="max-w-4xl space-y-2">
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black text-white tracking-tight leading-tight">
             Recover Revenue Before It Becomes{' '}
             <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
@@ -64,18 +64,17 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
             </span>
           </h1>
           <p className="text-sm sm:text-base text-slate-300 leading-relaxed max-w-3xl">
-            An AI revenue recovery agent that detects revenue risk, diagnoses the cause, chooses the right intervention, executes bounded recovery workflows, and measures the money recovered.
+            Find at-risk revenue and start recovery automatically. The agent diagnoses why payments fail, chooses the right action, and measures money recovered.
           </p>
         </div>
 
-        {/* CTAs & Quick Metrics Bar */}
+        {/* ONE CLEAR PRIMARY ACTION (Requirement #4) */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
           
-          {/* Action Buttons */}
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="space-y-1">
             <button
               onClick={onRunAgent}
-              className={`px-6 py-3 rounded-2xl text-sm font-black flex items-center gap-2.5 shadow-xl transition transform active:scale-95 ${
+              className={`px-8 py-3.5 rounded-2xl text-sm font-black flex items-center gap-3 shadow-xl transition transform active:scale-95 ${
                 isRunning
                   ? 'bg-amber-400 text-slate-950 hover:bg-amber-300 shadow-amber-500/20'
                   : 'bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-slate-950 shadow-emerald-500/30'
@@ -84,17 +83,12 @@ export const HeroBanner: React.FC<HeroBannerProps> = ({
               <Play className="w-5 h-5 fill-current" />
               {isRunning ? 'Pause Recovery Agent' : '▶ Run Recovery Agent'}
             </button>
-
-            <button
-              onClick={onViewActivity}
-              className="px-5 py-3 rounded-2xl bg-slate-900/90 hover:bg-slate-800 text-slate-200 border border-slate-700 text-sm font-semibold transition flex items-center gap-2 shadow-lg"
-            >
-              <Activity className="w-4 h-4 text-blue-400" />
-              View Agent Activity
-            </button>
+            <div className="text-[11px] text-slate-400 pl-1 font-medium">
+              Find at-risk revenue and start recovery automatically.
+            </div>
           </div>
 
-          {/* Dynamic Metrics Strip */}
+          {/* Quick Metrics Strip */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-950/70 p-3 rounded-2xl border border-slate-800/80 text-xs">
             <div className="px-2">
               <div className="text-slate-400 font-medium">Money Recovered</div>

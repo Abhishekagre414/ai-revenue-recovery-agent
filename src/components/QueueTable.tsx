@@ -6,25 +6,24 @@ import {
   ShoppingCart, 
   Search, 
   ArrowUpDown, 
-  CheckCircle, 
-  Clock, 
-  UserCheck, 
-  ShieldAlert, 
   ChevronRight,
   RefreshCw,
-  HelpCircle
+  HelpCircle,
+  AlertTriangle
 } from 'lucide-react';
 
 interface QueueTableProps {
   events: RevenueEvent[];
   onSelectCase: (evt: RevenueEvent) => void;
   selectedStageFilter: string;
+  onOpenConfirmationModal?: (evt: RevenueEvent, action: string) => void;
 }
 
 export const QueueTable: React.FC<QueueTableProps> = ({
   events,
   onSelectCase,
-  selectedStageFilter
+  selectedStageFilter,
+  onOpenConfirmationModal
 }) => {
   const [leakFilter, setLeakFilter] = useState<LeakType | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<TerminalState | 'all'>('all');
@@ -59,87 +58,68 @@ export const QueueTable: React.FC<QueueTableProps> = ({
 
   const formatRupee = (val: number) => `₹${val.toLocaleString('en-IN')}`;
 
-  const getLeakBadge = (type: LeakType) => {
+  const getIssueLabel = (type: LeakType) => {
     switch (type) {
       case 'payment_failure':
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-blue-500/10 text-blue-400 border border-blue-500/20 text-xs font-semibold">
-            <CreditCard className="w-3.5 h-3.5" />
-            Failed Payment
-          </span>
-        );
+        return <span className="text-slate-200 font-semibold flex items-center gap-1.5"><CreditCard className="w-3.5 h-3.5 text-blue-400" /> Payment Failed</span>;
       case 'failed_subscription':
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 text-xs font-semibold">
-            <RefreshCw className="w-3.5 h-3.5" />
-            Failed Subscription
-          </span>
-        );
+        return <span className="text-slate-200 font-semibold flex items-center gap-1.5"><RefreshCw className="w-3.5 h-3.5 text-cyan-400" /> Subscription Failed</span>;
       case 'overdue_invoice':
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-purple-500/10 text-purple-400 border border-purple-500/20 text-xs font-semibold">
-            <FileText className="w-3.5 h-3.5" />
-            Overdue Invoice
-          </span>
-        );
+        return <span className="text-slate-200 font-semibold flex items-center gap-1.5"><FileText className="w-3.5 h-3.5 text-purple-400" /> Invoice Overdue</span>;
       case 'checkout_abandonment':
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-semibold">
-            <ShoppingCart className="w-3.5 h-3.5" />
-            Checkout Abandon
-          </span>
-        );
+        return <span className="text-slate-200 font-semibold flex items-center gap-1.5"><ShoppingCart className="w-3.5 h-3.5 text-amber-400" /> Checkout Abandoned</span>;
       case 'mandate_failure':
-        return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-rose-500/10 text-rose-400 border border-rose-500/20 text-xs font-semibold">
-            <ShieldAlert className="w-3.5 h-3.5" />
-            Mandate Failure
-          </span>
-        );
+        return <span className="text-slate-200 font-semibold flex items-center gap-1.5"><AlertTriangle className="w-3.5 h-3.5 text-rose-400" /> Mandate Failed</span>;
     }
   };
 
+  // Requirement #6: Use status indicators consistently with both icon/dot AND text
   const getStatusBadge = (status: TerminalState) => {
     switch (status) {
       case 'recovered':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-xs font-bold">
-            <CheckCircle className="w-3 h-3" />
-            RECOVERED
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-xs font-bold">
+            <span>🟢</span> Recovered
           </span>
         );
       case 'actioned':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/30 text-xs font-bold">
-            <Clock className="w-3 h-3" />
-            ACTIONED
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/30 text-xs font-bold">
+            <span>🔵</span> Actioned
           </span>
         );
       case 'escalated_to_human':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 text-xs font-bold">
-            <UserCheck className="w-3 h-3" />
-            HUMAN QUEUE
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 text-xs font-bold">
+            <span>🟠</span> Escalated
           </span>
         );
       case 'blocked_by_guardrail':
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-500/15 text-rose-400 border border-rose-500/30 text-xs font-bold">
-            <ShieldAlert className="w-3 h-3" />
-            GUARDRAIL BLOCKED
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700 text-xs font-bold">
+            <span>⚪</span> Stopped
           </span>
         );
       default:
         return (
-          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-xs font-semibold animate-pulse">
-            QUEUED
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/20 text-xs font-semibold">
+            <span>🟡</span> Pending
           </span>
         );
     }
   };
 
+  const getActionLabel = (action: string) => {
+    if (action.includes('retry')) return 'Retry Payment';
+    if (action.includes('whatsapp') || action.includes('email')) return 'Send Reminder';
+    if (action.includes('invoice')) return 'Invoice Follow-up';
+    if (action.includes('checkout')) return 'Cart Reminder';
+    if (action.includes('subscription')) return 'Subscription Renewal';
+    return 'Escalate to AR';
+  };
+
   return (
-    <div className="glass-panel rounded-3xl border border-slate-800 overflow-hidden shadow-2xl">
+    <div className="glass-panel rounded-3xl border border-slate-800 overflow-hidden shadow-2xl space-y-0">
       
       {/* Table Toolbar */}
       <div className="p-4 border-b border-slate-800/80 bg-slate-900/60 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -151,7 +131,7 @@ export const QueueTable: React.FC<QueueTableProps> = ({
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search Customer ID, email, invoice ID..."
+            placeholder="Search Customer name, email, invoice ID..."
             className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500/50"
           />
         </div>
@@ -159,18 +139,18 @@ export const QueueTable: React.FC<QueueTableProps> = ({
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-2 text-xs">
           
-          {/* Scenario Filter (Hackathon prompt 5) */}
+          {/* Scenario Filter */}
           <select
             value={leakFilter}
             onChange={(e) => setLeakFilter(e.target.value as any)}
             className="bg-slate-950/80 border border-slate-800 text-slate-300 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-blue-500/50"
           >
-            <option value="all">All 5 Scenarios</option>
-            <option value="payment_failure">Failed Payment</option>
-            <option value="failed_subscription">Failed Subscription</option>
-            <option value="overdue_invoice">Overdue Invoice</option>
-            <option value="checkout_abandonment">Checkout Abandonment</option>
-            <option value="mandate_failure">Mandate Failure</option>
+            <option value="all">All Issues</option>
+            <option value="payment_failure">Payment Failed</option>
+            <option value="failed_subscription">Subscription Renewal Failed</option>
+            <option value="overdue_invoice">Invoice Overdue</option>
+            <option value="checkout_abandonment">Checkout Abandoned</option>
+            <option value="mandate_failure">Mandate Failed</option>
           </select>
 
           {/* Status Filter */}
@@ -180,11 +160,11 @@ export const QueueTable: React.FC<QueueTableProps> = ({
             className="bg-slate-950/80 border border-slate-800 text-slate-300 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-blue-500/50"
           >
             <option value="all">All Statuses</option>
-            <option value="pending">Queued / Pending</option>
+            <option value="pending">Pending</option>
             <option value="actioned">Actioned</option>
             <option value="recovered">Recovered</option>
-            <option value="escalated_to_human">Human Escalated</option>
-            <option value="blocked_by_guardrail">Guardrail Blocked</option>
+            <option value="escalated_to_human">Escalated</option>
+            <option value="blocked_by_guardrail">Stopped</option>
           </select>
 
           {/* Risk Level Filter */}
@@ -194,9 +174,9 @@ export const QueueTable: React.FC<QueueTableProps> = ({
             className="bg-slate-950/80 border border-slate-800 text-slate-300 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-blue-500/50"
           >
             <option value="all">All Risk Levels</option>
-            <option value="HIGH">HIGH Risk</option>
-            <option value="MEDIUM">MEDIUM Risk</option>
-            <option value="LOW">LOW Risk</option>
+            <option value="HIGH">High Risk</option>
+            <option value="MEDIUM">Medium Risk</option>
+            <option value="LOW">Low Risk</option>
           </select>
 
           {/* Sort By */}
@@ -206,46 +186,40 @@ export const QueueTable: React.FC<QueueTableProps> = ({
               onClick={() => setSortBy('value')}
               className={`px-2 py-1 rounded-lg ${sortBy === 'value' ? 'bg-blue-600 text-white font-bold' : 'hover:text-slate-200'}`}
             >
-              Exp. Value (₹)
+              Exp. Value
             </button>
             <button
               onClick={() => setSortBy('amount')}
               className={`px-2 py-1 rounded-lg ${sortBy === 'amount' ? 'bg-blue-600 text-white font-bold' : 'hover:text-slate-200'}`}
             >
-              Amount (₹)
-            </button>
-            <button
-              onClick={() => setSortBy('score')}
-              className={`px-2 py-1 rounded-lg ${sortBy === 'score' ? 'bg-blue-600 text-white font-bold' : 'hover:text-slate-200'}`}
-            >
-              Score (%)
+              Amount
             </button>
           </div>
 
         </div>
       </div>
 
-      {/* Events Table */}
+      {/* Events Table (Requirement #7: Simple Customer Table) */}
       <div className="overflow-x-auto">
         <table className="w-full text-left text-xs border-collapse">
           <thead>
             <tr className="border-b border-slate-800/80 bg-slate-950/40 text-slate-400 uppercase font-semibold text-[10px] tracking-wider">
-              <th className="py-3 px-4">Customer / ID</th>
-              <th className="py-3 px-4">Scenario Type</th>
-              <th className="py-3 px-4">Risk Level</th>
-              <th className="py-3 px-4 text-right">Amount (₹)</th>
-              <th className="py-3 px-4 text-right">Recovery Prob</th>
-              <th className="py-3 px-4 text-right">Exp. Recovered (₹)</th>
-              <th className="py-3 px-4">Status</th>
-              <th className="py-3 px-4">Recommended Intervention & Why</th>
-              <th className="py-3 px-4 text-center">Inspect</th>
+              <th className="py-3.5 px-4">Customer</th>
+              <th className="py-3.5 px-4">Issue</th>
+              <th className="py-3.5 px-4 text-right">Amount</th>
+              <th className="py-3.5 px-4">Risk</th>
+              <th className="py-3.5 px-4">Recommended Action</th>
+              <th className="py-3.5 px-4">Status</th>
+              <th className="py-3.5 px-4 text-center">Inspect</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/60 font-medium">
             {sortedEvents.length === 0 ? (
               <tr>
-                <td colSpan={9} className="py-8 text-center text-slate-500">
-                  No revenue leak cases match your current filter parameters.
+                <td colSpan={7} className="py-12 text-center text-slate-400 font-sans space-y-2">
+                  <div className="text-2xl">🎉</div>
+                  <div className="font-bold text-slate-200">No Revenue at Risk</div>
+                  <p className="text-xs text-slate-500">All currently detected revenue issues have been handled or match your filter parameters.</p>
                 </td>
               </tr>
             ) : (
@@ -255,65 +229,57 @@ export const QueueTable: React.FC<QueueTableProps> = ({
                   onClick={() => onSelectCase(evt)}
                   className="hover:bg-slate-800/40 transition cursor-pointer group"
                 >
-                  <td className="py-3 px-4">
-                    <div className="font-bold text-slate-100 font-mono">{evt.id}</div>
-                    <div className="text-[11px] text-slate-300 font-semibold">{evt.customer_name}</div>
+                  {/* Customer */}
+                  <td className="py-3.5 px-4">
+                    <div className="font-bold text-slate-100">{evt.customer_name}</div>
                     <div className="text-[10px] text-slate-400 font-mono">{evt.customer_email}</div>
                   </td>
-                  <td className="py-3 px-4">
-                    {getLeakBadge(evt.type)}
+
+                  {/* Issue */}
+                  <td className="py-3.5 px-4">
+                    {getIssueLabel(evt.type)}
                   </td>
-                  <td className="py-3 px-4">
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+
+                  {/* Amount */}
+                  <td className="py-3.5 px-4 text-right font-bold text-slate-200 font-mono">
+                    {formatRupee(evt.amount)}
+                  </td>
+
+                  {/* Risk */}
+                  <td className="py-3.5 px-4">
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
                       evt.risk_level === 'HIGH'
                         ? 'bg-rose-500/15 text-rose-400 border-rose-500/30'
                         : evt.risk_level === 'MEDIUM'
                         ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
                         : 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
                     }`}>
-                      {evt.risk_level} RISK
+                      {evt.risk_level === 'HIGH' ? '🔴 High Risk' : evt.risk_level === 'MEDIUM' ? '🟡 Medium Risk' : '🟢 Low Risk'}
                     </span>
                   </td>
-                  <td className="py-3 px-4 text-right font-bold text-slate-200 font-mono">
-                    {formatRupee(evt.amount)}
-                  </td>
-                  <td className="py-3 px-4 text-right font-mono">
-                    <span className={evt.recovery_probability > 85 ? 'text-emerald-400 font-bold' : evt.recovery_probability > 60 ? 'text-amber-400 font-bold' : 'text-rose-400 font-bold'}>
-                      {evt.recovery_probability}%
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-right font-black text-emerald-400 font-mono">
-                    {formatRupee(evt.expected_recoverable_value)}
-                  </td>
-                  <td className="py-3 px-4">
-                    {getStatusBadge(evt.status)}
-                  </td>
-                  <td className="py-3 px-4 max-w-xs text-slate-300">
+
+                  {/* Action */}
+                  <td className="py-3.5 px-4 text-blue-400 font-bold">
                     {evt.decision ? (
-                      <div className="space-y-0.5">
-                        <div className="font-bold text-blue-400 text-[11px] capitalize flex items-center gap-1">
-                          {evt.decision.chosen_action_type.replace('_', ' ')}
-                          <span className="text-[9px] text-slate-400 font-mono">({evt.decision.confidence}%)</span>
-                        </div>
-                        <div className="text-[10px] text-slate-400 line-clamp-1 italic" title={evt.decision.why_this_action}>
-                          "{evt.decision.why_this_action}"
-                        </div>
-                      </div>
-                    ) : evt.diagnosis ? (
-                      <div className="text-[11px] font-semibold text-slate-300">
-                        {evt.diagnosis.root_cause}
-                      </div>
+                      <span className="capitalize">{getActionLabel(evt.decision.chosen_action_type)}</span>
                     ) : (
-                      <span className="text-slate-500 italic">Pending Diagnostic Agent</span>
+                      <span className="text-slate-500 italic">Analyzing...</span>
                     )}
                   </td>
-                  <td className="py-3 px-4 text-center">
+
+                  {/* Status */}
+                  <td className="py-3.5 px-4">
+                    {getStatusBadge(evt.status)}
+                  </td>
+
+                  {/* Inspect */}
+                  <td className="py-3.5 px-4 text-center">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         onSelectCase(evt);
                       }}
-                      className="p-1.5 rounded-lg bg-slate-800 group-hover:bg-blue-600 text-slate-400 group-hover:text-white transition"
+                      className="p-1.5 rounded-xl bg-slate-800 group-hover:bg-blue-600 text-slate-400 group-hover:text-white transition"
                     >
                       <ChevronRight className="w-4 h-4" />
                     </button>
